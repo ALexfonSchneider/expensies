@@ -131,14 +131,14 @@ export default function Receipts() {
         setSession(s);
         setShowForm(false);
         setForm(EMPTY_INPUT);
-        setNotice('Сессия проверена и сохранена. Теперь можно синхронизировать чеки.');
+        setNotice('Подключено. Чеки начнут загружаться автоматически.');
       })
       .catch(fail)
       .finally(() => setBusy(false));
   };
 
   const clearSession = () => {
-    if (!window.confirm('Отключить архив чеков? Загруженные чеки останутся.')) return;
+    if (!window.confirm('Отключить «Мои чеки онлайн»? Загруженные чеки останутся.')) return;
     api.receipts
       .clearSession()
       .then(loadSession)
@@ -195,20 +195,20 @@ export default function Receipts() {
             <h2>Архив «Мои чеки онлайн»</h2>
             {session?.configured && (
               <span className="hint">
-                {session.phone} · обновлено {fmtDateTime(session.updated_at)}
+                {session.phone} · подключено {fmtDateTime(session.updated_at)}
               </span>
             )}
           </div>
           {session?.configured && !showForm ? (
             <div className="inline-form">
               <button type="button" className="btn btn-primary" disabled={status?.running ?? false} onClick={startSync}>
-                {status?.running ? 'Синхронизация идёт…' : 'Синхронизировать'}
+                {status?.running ? 'Загружаем…' : 'Загрузить чеки'}
               </button>
               <button type="button" className="btn" onClick={matchNow}>
-                Сопоставить с операциями
+                Привязать к операциям
               </button>
               <button type="button" className="btn" onClick={() => setShowForm(true)}>
-                Обновить сессию
+                Обновить ключ
               </button>
               <button type="button" className="btn btn-danger" onClick={clearSession}>
                 Отключить
@@ -217,39 +217,31 @@ export default function Receipts() {
           ) : (
             <form className="session-form" onSubmit={saveSession}>
               <label>
-                Ответ <code>auth/token</code> целиком или только refresh token
+                Ключ доступа из «Мои чеки онлайн»
                 <textarea
                   value={form.refresh_token}
                   onChange={(e) => setForm({ ...form, refresh_token: e.target.value })}
                   rows={5}
-                  placeholder='{"refreshToken": "...", "token": "...", ...}'
+                  placeholder="Вставьте скопированный текст целиком"
                   required
                 />
               </label>
-              <p className="hint">
-                Телефон и device id читаются из самого refresh-токена, поля ниже нужны только если хотите их
-                переопределить.
-              </p>
-              <label>
-                Телефон
-                <input
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="+7 999 123-45-67"
-                />
-              </label>
-              <label>
-                Device ID
-                <input value={form.device_id} onChange={(e) => setForm({ ...form, device_id: e.target.value })} />
-              </label>
-              <label>
-                Access token <span className="hint">(необязательно, обновится сам)</span>
-                <textarea
-                  value={form.access_token}
-                  onChange={(e) => setForm({ ...form, access_token: e.target.value })}
-                  rows={2}
-                />
-              </label>
+              <details className="howto">
+                <summary>Дополнительно</summary>
+                <p className="hint">Обычно заполнять не нужно: телефон и устройство определяются по ключу.</p>
+                <label>
+                  Телефон
+                  <input
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    placeholder="+7 999 123-45-67"
+                  />
+                </label>
+                <label>
+                  Идентификатор устройства
+                  <input value={form.device_id} onChange={(e) => setForm({ ...form, device_id: e.target.value })} />
+                </label>
+              </details>
               <div className="inline-form">
                 <button type="submit" className="btn btn-primary" disabled={busy}>
                   {busy ? 'Проверяем…' : 'Сохранить и проверить'}
@@ -263,57 +255,52 @@ export default function Receipts() {
             </form>
           )}
           <details className="howto">
-            <summary>Как получить токены</summary>
+            <summary>Как получить ключ</summary>
             <ol>
               <li>
-                Войдите на <a href="https://lkdr.nalog.ru" target="_blank" rel="noreferrer">lkdr.nalog.ru</a> как обычно
-                (капча и код из SMS).
+                Войдите на <a href="https://lkdr.nalog.ru" target="_blank" rel="noreferrer">lkdr.nalog.ru</a> как обычно.
               </li>
               <li>
-                Откройте DevTools (F12), вкладка Network, фильтр <code>mco.nalog.ru</code>. Перезагрузите страницу.
+                Нажмите F12, откройте вкладку Network и в строке фильтра введите <code>auth</code>. Обновите страницу.
               </li>
               <li>
-                Найдите запрос <code>auth/token</code> (или <code>auth/challenge/sms/verify</code> сразу после входа) и
-                скопируйте его ответ целиком, вкладка Response.
+                Выберите запрос <code>token</code>, откройте его вкладку Response и скопируйте весь текст.
               </li>
-              <li>
-                Вставьте ответ в поле выше. Приложение само обновляет токены; когда refresh token перестанет приниматься,
-                повторите вход и обновите сессию.
-              </li>
+              <li>Вставьте его в поле выше и нажмите «Сохранить и проверить».</li>
             </ol>
-            <p className="hint">
-              Токены дают доступ ко всем вашим чекам и хранятся только в локальной базе. Вход с капчей приложение не
-              выполняет и не обходит.
-            </p>
+            <p className="hint">Если чеки перестанут загружаться, повторите эти шаги и нажмите «Обновить ключ».</p>
+            <p className="hint">Ключ даёт доступ ко всем вашим чекам и хранится только у вас.</p>
           </details>
         </section>
 
         <section className="card">
           <div className="card-head">
-            <h2>Синхронизация</h2>
+            <h2>Загрузка чеков</h2>
           </div>
           {status ? (
             <div className="sync-status">
               {status.running ? (
                 <p>
-                  <strong>Идёт синхронизация</strong> с {fmtDateTime(status.started_at)}: просмотрено {int(status.listed)},
-                  новых {int(status.added)}, с позициями {int(status.detailed)}, в очереди {int(status.pending)}.
+                  <strong>Загружаем чеки</strong> с {fmtDateTime(status.started_at)}: новых {int(status.added)}, с
+                  составом {int(status.detailed)}, осталось {int(status.pending)}.
                 </p>
               ) : status.finished_at ? (
                 <p>
-                  Последняя: {fmtDateTime(status.finished_at)}. Просмотрено {int(status.listed)}, новых{' '}
-                  {int(status.added)}, загружено позиций для {int(status.detailed)}, сопоставлено {int(status.matched)}
-                  {status.pending > 0 && <>, ещё без позиций {int(status.pending)}</>}.
+                  Последняя загрузка {fmtDateTime(status.finished_at)}: новых чеков {int(status.added)}, привязано к
+                  операциям {int(status.matched)}
+                  {status.pending > 0 && <>, ещё без состава {int(status.pending)}</>}.
                 </p>
               ) : (
-                <p className="hint">Синхронизация ещё не запускалась.</p>
+                <p className="hint">Чеки ещё не загружались.</p>
               )}
-              {status.error && <div className="alert">{status.error}</div>}
-              <p className="hint">
-                Новые чеки подтягиваются сами каждые 6 часов и при старте сервера, страницу держать открытой не нужно.
-                Архив отдаёт около 20 запросов в минуту, поэтому первая загрузка длинной истории занимает время; прогресс
-                сохраняется, прерванный запуск продолжается автоматически.
-              </p>
+              {status.error && (
+                <div className="alert">
+                  {/session|refresh token/i.test(status.error)
+                    ? 'Ключ доступа устарел. Обновите его, и загрузка продолжится.'
+                    : 'Загрузка прервалась. Попробуйте позже или нажмите «Загрузить чеки».'}
+                </div>
+              )}
+              <p className="hint">Новые чеки подтягиваются автоматически несколько раз в день.</p>
             </div>
           ) : (
             <div className="hint">…</div>
@@ -331,7 +318,7 @@ export default function Receipts() {
         </div>
         <p className="hint">
           {int(total)} {plural(total, ['чек', 'чека', 'чеков'])}
-          {unmatchedOnly ? ' без оплаты в выписке; такие чеки учтены как отдельные операции' : ''}
+          {unmatchedOnly ? ' без оплаты в выписке, учтены как отдельные операции' : ''}
         </p>
         <table className="table">
           <thead>

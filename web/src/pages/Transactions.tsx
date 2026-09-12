@@ -521,7 +521,7 @@ export default function Transactions() {
                         {t.source === "receipt" && (
                           <span
                             className="badge badge-muted"
-                            title="Операция построена по чеку, в выписке её пока нет"
+                            title="Есть чек, но в выписке этой оплаты пока нет"
                           >
                             по чеку, вне выписки
                           </span>

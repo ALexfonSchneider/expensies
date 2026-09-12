@@ -81,7 +81,7 @@ export default function Statements() {
           hidden
           onChange={(e) => upload(e.target.files)}
         />
-        <p className="hint">Поддерживается выписка Яндекс Банка. Повторная загрузка того же периода не создаёт дублей.</p>
+        <p className="hint">Выписка Яндекс Банка в PDF. Одни и те же операции второй раз не добавятся.</p>
       </div>
 
       {error && <div className="alert">{error}</div>}

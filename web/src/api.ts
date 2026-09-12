@@ -329,7 +329,21 @@ export class ApiError extends Error {
   }
 }
 
+// Plain-language messages for the errors a person can act on; anything
+// else falls back to the server text.
+const FRIENDLY: Record<string, string> = {
+  receipt_session: 'Ключ доступа к «Мои чеки онлайн» не подключён или устарел. Обновите его в разделе «Чеки».',
+  too_large: 'Файл слишком большой.',
+};
+
 export function errorMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (FRIENDLY[e.code]) return FRIENDLY[e.code];
+    if (e.status === 409 && e.message.includes('sync is already running')) return 'Загрузка чеков уже идёт.';
+    if (e.message.includes('session check failed')) return 'Ключ не подошёл. Проверьте, что скопирован весь текст, и попробуйте снова.';
+    if (e.status >= 500) return 'Что-то пошло не так. Попробуйте ещё раз.';
+    return e.message.replace(/^invalid input: /, '');
+  }
   if (e instanceof Error) return e.message;
   return String(e);
 }
