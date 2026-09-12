@@ -19,11 +19,29 @@ PDF из приложения). Парсер лежит в `internal/adapters/ya
 - Docker + Compose (для Postgres) - в WSL.
 - Node 18+ и npm (для сборки фронтенда) - в WSL.
 
-## Быстрый старт
+## Быстрый старт в Docker
 
 ```bash
-# 1. Postgres (в WSL, из каталога проекта)
-docker compose up -d
+docker compose up -d --build
+```
+
+Собирает образ (фронтенд на Node, бинарник на Go, runtime на Alpine,
+около 56 МБ) и поднимает приложение вместе с Postgres. Открыть
+<http://localhost:8080>. Данные живут в томе `expenses-pgdata`, при
+пересборке образа не теряются. Контекст сборки это родительский
+каталог, потому что `go.mod` подтягивает goplatform через
+`replace ../platforme`; compose уже настроен на это. Образ запускается
+от непривилегированного пользователя, healthcheck ходит в
+`/healthz/ready`.
+
+Переменные окружения в `docker-compose.yaml` переопределяют
+`config/*.yaml`; там же настраивается интервал загрузки чеков и OTLP.
+
+## Запуск без Docker (разработка)
+
+```bash
+# 1. Только Postgres
+docker compose up -d postgres
 
 # 2. Фронтенд (в WSL)
 cd web && npm install && npm run build && cd ..
@@ -33,8 +51,8 @@ go run ./cmd
 ```
 
 Открыть <http://localhost:8080>, перейти в "Выписки" и загрузить PDF.
-Миграции схемы применяются автоматически при старте сервера, перед тем
-как HTTP начнёт принимать запросы.
+Миграции схемы (приложения и River) применяются автоматически при старте
+сервера, перед тем как HTTP начнёт принимать запросы.
 
 Если `docker compose` в неинтерактивной WSL-сессии падает на
 `docker-credential-desktop.exe`, для публичных образов достаточно

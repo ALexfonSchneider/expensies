@@ -1,4 +1,4 @@
-.PHONY: build run test lint tidy clean web-install web-build web-dev db-up db-down
+.PHONY: build run test lint tidy clean web-install web-build web-dev db-up db-down docker-build docker-up docker-down docker-logs
 
 build: ## Go binary with the embedded frontend (run web-build first)
 	go build -o bin/expenses ./cmd
@@ -35,3 +35,17 @@ db-up:
 
 db-down:
 	docker compose down
+
+# Whole stack in Docker. The image build needs ../platforme next to this
+# directory (go.mod replace); compose already sets the context.
+docker-build:
+	docker compose build
+
+docker-up:
+	docker compose up -d --build
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f app
