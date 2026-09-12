@@ -36,8 +36,7 @@ db-up:
 db-down:
 	docker compose down
 
-# Whole stack in Docker. The image build needs ../platforme next to this
-# directory (go.mod replace); compose already sets the context.
+# Whole stack in Docker; the build context is this directory.
 docker-build:
 	docker compose build
 

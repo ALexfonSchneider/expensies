@@ -10,9 +10,7 @@
 services:
   app:
     build:
-      # The parent directory: the Go module pulls goplatform from ../platforme.
-      context: ..
-      dockerfile: expenses/Dockerfile
+      context: .
     image: expenses:latest
     container_name: expenses-app
     environment:

@@ -21,3 +21,5 @@ Thumbs.db
 # never commit real bank statements or receipts
 *.pdf
 testdata/private/
+go.work
+go.work.sum

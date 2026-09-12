@@ -5,8 +5,11 @@
 раскладывает по категориям и показывает итоги по дням, неделям и месяцам,
 разбивку по категориям и продавцам, тренд к предыдущему периоду.
 
-Построено на [goplatform](../platforme): `platform.App` + `pkg/server` +
-`pkg/postgres` + `pkg/observe`. Фронтенд - React + Vite + TypeScript,
+Построено на [goplatform](https://github.com/ALexfonSchneider/goplatform)
+(зависимость `v0.1.0` в go.mod): `platform.App` + `pkg/server` +
+`pkg/postgres` + `pkg/observe` + `pkg/taskengine/river`. Чтобы править
+SDK и приложение одновременно, положите оба репозитория рядом и создайте
+`go.work` (`go work init . ../platforme`); файл не коммитится. Фронтенд - React + Vite + TypeScript,
 собранный `dist/` встраивается в Go-бинарник, всё живёт на одном порту.
 
 Сейчас поддерживается выписка **Яндекс Банка** ("Выписка по договору",
@@ -28,11 +31,8 @@ docker compose up -d --build
 Собирает образ (фронтенд на Node, бинарник на Go, runtime на Alpine,
 около 56 МБ) и поднимает приложение вместе с Postgres. Открыть
 <http://localhost:8080>. Данные живут в томе `expenses-pgdata`, при
-пересборке образа не теряются. Контекст сборки это родительский
-каталог, потому что `go.mod` подтягивает goplatform через
-`replace ../platforme`; compose уже настроен на это. Образ запускается
-от непривилегированного пользователя, healthcheck ходит в
-`/healthz/ready`.
+пересборке образа не теряются. Образ запускается от непривилегированного
+пользователя, healthcheck ходит в `/healthz/ready`.
 
 Переменные окружения в `docker-compose.yaml` переопределяют
 `config/*.yaml`; там же настраивается интервал загрузки чеков и OTLP.

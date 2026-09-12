@@ -3,7 +3,7 @@ module github.com/ALexfonSchneider/expenses
 go 1.25.7
 
 require (
-	github.com/ALexfonSchneider/goplatform v0.0.0
+	github.com/ALexfonSchneider/goplatform v0.1.0
 	github.com/dslipak/pdf v0.0.2
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/jackc/pgx/v5 v5.9.2
@@ -88,5 +88,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/ALexfonSchneider/goplatform => ../platforme
