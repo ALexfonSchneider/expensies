@@ -1,0 +1,23 @@
+# build artifacts
+bin/
+tmp/
+
+# frontend
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
+
+# local overrides and secrets (the DB holds the receipt session, not files)
+.env
+.env.*
+*.local.yaml
+
+# editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# never commit real bank statements or receipts
+*.pdf
+testdata/private/

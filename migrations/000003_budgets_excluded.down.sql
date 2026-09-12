@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS budgets;
+ALTER TABLE transactions DROP COLUMN IF EXISTS excluded;

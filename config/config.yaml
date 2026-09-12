@@ -1,0 +1,11 @@
+server:
+  addr: ":8080"
+
+observe:
+  service_name: "expenses"
+  # Empty means no OTLP export. Set to "localhost:4317" when the goplatform
+  # docker-compose observability stack is running.
+  otlp_endpoint: ""
+
+upload:
+  max_size_mb: 20

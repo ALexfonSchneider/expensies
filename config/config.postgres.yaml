@@ -1,0 +1,4 @@
+postgres:
+  # Matches docker-compose.yaml in this directory. Override with
+  # EXPENSES__POSTGRES__DSN.
+  dsn: "postgres://expenses:expenses@localhost:5433/expenses?sslmode=disable"
