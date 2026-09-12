@@ -18,11 +18,13 @@ import (
 	"github.com/ALexfonSchneider/goplatform/pkg/platform"
 	"github.com/ALexfonSchneider/goplatform/pkg/postgres"
 	"github.com/ALexfonSchneider/goplatform/pkg/server"
+	taskriver "github.com/ALexfonSchneider/goplatform/pkg/taskengine/river"
 
 	"github.com/ALexfonSchneider/expenses/internal/adapters/handlers/api"
 	"github.com/ALexfonSchneider/expenses/internal/adapters/handlers/spa"
 	"github.com/ALexfonSchneider/expenses/internal/adapters/lkdr"
 	"github.com/ALexfonSchneider/expenses/internal/adapters/postgresrepo"
+	"github.com/ALexfonSchneider/expenses/internal/adapters/riverjobs"
 	"github.com/ALexfonSchneider/expenses/internal/adapters/yandexpdf"
 	"github.com/ALexfonSchneider/expenses/internal/app"
 	"github.com/ALexfonSchneider/expenses/migrations"
@@ -109,15 +111,19 @@ func run() error {
 		return err
 	}
 
-	// Schema migrations run once Postgres is up and before the HTTP server
-	// accepts requests. BeforeStart fires per component in registration
-	// order, so hooking "server" guarantees "postgres" has already started.
+	// Schema migrations run once Postgres is up and before anything uses
+	// the tables. BeforeStart fires per component in registration order, so
+	// hooking "jobs" guarantees "postgres" has already started. River keeps
+	// its own schema and migrates it the same way.
 	application.OnBeforeStart(func(ctx context.Context, name string) error {
-		if name != "server" {
+		if name != "jobs" {
 			return nil
 		}
 		if err := db.Migrate(ctx, migrations.FS); err != nil {
 			return fmt.Errorf("migrate: %w", err)
+		}
+		if _, err := taskriver.Migrate(ctx, db); err != nil {
+			return fmt.Errorf("migrate river: %w", err)
 		}
 		logger.InfoContext(ctx, "migrations applied")
 		return nil
@@ -133,27 +139,31 @@ func run() error {
 		return fmt.Errorf("lkdr: %w", err)
 	}
 	svc, err := app.NewService(app.Deps{
-		Logger:              logger,
-		Parser:              parser,
-		Statements:          repo.Statements,
-		Transactions:        repo.Transactions,
-		Categories:          repo.Categories,
-		Analytics:           repo.Analytics,
-		Budgets:             repo.Budgets,
-		ReceiptSource:       receiptSource,
-		ReceiptSessions:     repo.Settings,
-		ReceiptSync:         repo.Settings,
-		Receipts:            repo.Receipts,
-		ReceiptSyncInterval: syncInterval,
-		Now:                 time.Now,
+		Logger:          logger,
+		Parser:          parser,
+		Statements:      repo.Statements,
+		Transactions:    repo.Transactions,
+		Categories:      repo.Categories,
+		Analytics:       repo.Analytics,
+		Budgets:         repo.Budgets,
+		ReceiptSource:   receiptSource,
+		ReceiptSessions: repo.Settings,
+		ReceiptSync:     repo.Settings,
+		Receipts:        repo.Receipts,
+		Now:             time.Now,
 	})
 	if err != nil {
 		return fmt.Errorf("service: %w", err)
 	}
-	// The service runs the receipt synchronization in the background;
-	// registering it between postgres and the server stops that job before
-	// the pool closes and after the HTTP server stops taking requests.
-	if err := application.Register("app", svc); err != nil {
+
+	// Background work runs on River. The worker sits between postgres and
+	// the HTTP server so a running job is drained before the pool closes.
+	jobs, err := riverjobs.New(db, svc, riverjobs.Config{Interval: syncInterval, Logger: logger})
+	if err != nil {
+		return fmt.Errorf("jobs: %w", err)
+	}
+	svc.SetReceiptSyncScheduler(jobs)
+	if err := application.Register("jobs", jobs.Worker()); err != nil {
 		return err
 	}
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ALexfonSchneider/goplatform/pkg/platform"
+
 	"github.com/ALexfonSchneider/expenses/internal/domain"
 )
 
@@ -87,13 +89,14 @@ func (s *Service) ClearReceiptSession(ctx context.Context) error {
 	return nil
 }
 
-// ReceiptSyncStatus reports the running or the last synchronization.
+// ReceiptSyncStatus reports the running or the last synchronization plus
+// the next periodic trigger.
 func (s *Service) ReceiptSyncStatus(ctx context.Context) (domain.ReceiptSyncStatus, error) {
 	s.sync.mu.Lock()
-	defer s.sync.mu.Unlock()
 	if !s.sync.status.Running && !s.sync.loaded {
 		st, err := s.syncStore.LoadSyncStatus(ctx)
 		if err != nil {
+			s.sync.mu.Unlock()
 			return domain.ReceiptSyncStatus{}, fmt.Errorf("app: load sync status: %w", err)
 		}
 		if st != nil {
@@ -102,14 +105,21 @@ func (s *Service) ReceiptSyncStatus(ctx context.Context) (domain.ReceiptSyncStat
 		s.sync.loaded = true
 	}
 	out := s.sync.status
-	out.NextRunAt = s.nextRun
+	s.sync.mu.Unlock()
+
+	if s.scheduler != nil {
+		next, err := s.scheduler.NextRunAt(ctx)
+		if err != nil {
+			return domain.ReceiptSyncStatus{}, fmt.Errorf("app: next sync run: %w", err)
+		}
+		out.NextRunAt = next
+	}
 	return out, nil
 }
 
-// StartReceiptSync launches a background synchronization. The archive
-// throttles clients to about twenty requests a minute, so a first run over
-// a long history takes a while; progress is visible through
-// ReceiptSyncStatus and the run survives the HTTP request that started it.
+// StartReceiptSync asks the task engine to run a synchronization as soon
+// as possible. The run itself happens in RunReceiptSync on a worker; this
+// call returns right away with the current status.
 func (s *Service) StartReceiptSync(ctx context.Context) (domain.ReceiptSyncStatus, error) {
 	sess, err := s.ReceiptSession(ctx)
 	if err != nil {
@@ -118,43 +128,47 @@ func (s *Service) StartReceiptSync(ctx context.Context) (domain.ReceiptSyncStatu
 	if sess == nil {
 		return domain.ReceiptSyncStatus{}, fmt.Errorf("app: start sync: %w", domain.ErrReceiptSession)
 	}
-
-	s.sync.mu.Lock()
-	if s.sync.status.Running {
-		st := s.sync.status
-		s.sync.mu.Unlock()
-		return st, fmt.Errorf("%w: sync is already running", domain.ErrAlreadyExists)
+	if s.scheduler == nil {
+		return domain.ReceiptSyncStatus{}, fmt.Errorf("app: start sync: task engine is not configured")
 	}
-	runCtx, cancel := context.WithCancel(s.bgCtx)
-	s.sync.status = domain.ReceiptSyncStatus{Running: true, StartedAt: s.now()}
-	s.sync.loaded = true
-	s.sync.cancel = cancel
-	s.sync.done = make(chan struct{})
-	status := s.sync.status
-	done := s.sync.done
-	s.sync.mu.Unlock()
-
-	go func() {
-		defer close(done)
-		s.runReceiptSync(runCtx)
-	}()
-	return status, nil
+	if err := s.scheduler.Enqueue(ctx); err != nil {
+		st, _ := s.ReceiptSyncStatus(ctx)
+		return st, fmt.Errorf("app: start sync: %w", err)
+	}
+	return s.ReceiptSyncStatus(ctx)
 }
 
-func (s *Service) runReceiptSync(ctx context.Context) {
+// RunReceiptSync performs one synchronization end to end. It is the job
+// body the task engine executes; the engine guarantees a single run at a
+// time. Without a configured session it returns nil so the periodic job
+// stays quiet instead of failing every interval.
+func (s *Service) RunReceiptSync(ctx context.Context) error {
+	sess, err := s.sessions.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("app: load receipt session: %w", err)
+	}
+	if sess == nil {
+		return nil
+	}
+
+	s.sync.mu.Lock()
+	s.sync.status = domain.ReceiptSyncStatus{Running: true, StartedAt: s.now()}
+	s.sync.loaded = true
+	s.sync.mu.Unlock()
+
 	update := func(fn func(st *domain.ReceiptSyncStatus)) {
 		s.sync.mu.Lock()
 		fn(&s.sync.status)
 		s.sync.mu.Unlock()
 	}
 
-	err := s.syncReceipts(ctx, update)
+	runErr := s.syncReceipts(ctx, update)
 	now := s.now()
 	update(func(st *domain.ReceiptSyncStatus) {
 		st.Running = false
 		st.FinishedAt = now
-		if err != nil {
-			st.Error = err.Error()
+		if runErr != nil {
+			st.Error = runErr.Error()
 		}
 	})
 	s.sync.mu.Lock()
@@ -168,14 +182,20 @@ func (s *Service) runReceiptSync(ctx context.Context) {
 	if err := s.syncStore.SaveSyncStatus(saveCtx, &final, now); err != nil {
 		s.logger.ErrorContext(saveCtx, "save receipt sync status", "error", err)
 	}
-	if err != nil {
-		s.logger.WarnContext(saveCtx, "receipt sync finished with error", "error", err,
+	if runErr != nil {
+		s.logger.WarnContext(saveCtx, "receipt sync finished with error", "error", runErr,
 			"listed", final.Listed, "added", final.Added, "detailed", final.Detailed)
-		return
+		// A dead session is permanent until the user pastes a new key; the
+		// task engine cancels the job instead of retrying it.
+		if errors.Is(runErr, domain.ErrReceiptSession) {
+			return platform.WrapError(platform.CodeUnauthenticated, "receipt archive session expired", runErr)
+		}
+		return runErr
 	}
 	s.logger.InfoContext(saveCtx, "receipt sync finished",
 		"listed", final.Listed, "added", final.Added, "detailed", final.Detailed,
 		"pending", final.Pending, "matched", final.Matched)
+	return nil
 }
 
 func (s *Service) syncReceipts(ctx context.Context, update func(func(*domain.ReceiptSyncStatus))) error {

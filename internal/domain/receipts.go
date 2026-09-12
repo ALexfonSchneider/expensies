@@ -146,6 +146,17 @@ type ReceiptFilter struct {
 	Offset    int
 }
 
+// ReceiptSyncScheduler owns when a synchronization runs. The service only
+// knows how to perform one; enqueueing, deduplication, retries and the
+// periodic trigger live behind this port.
+type ReceiptSyncScheduler interface {
+	// Enqueue asks for a run as soon as possible. When one is already
+	// queued or running it reports ErrAlreadyExists.
+	Enqueue(ctx context.Context) error
+	// NextRunAt is the next periodic trigger; zero when there is none.
+	NextRunAt(ctx context.Context) (time.Time, error)
+}
+
 // ReceiptSyncStatus reports one synchronization run.
 type ReceiptSyncStatus struct {
 	Running    bool

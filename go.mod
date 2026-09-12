@@ -9,6 +9,8 @@ require (
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jfk9w-go/based v1.0.24
 	github.com/jfk9w-go/lkdr-api v1.1.18
+	github.com/riverqueue/river v0.38.0
+	github.com/riverqueue/river/rivertype v0.38.0
 )
 
 require (
@@ -49,10 +51,9 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
-	github.com/riverqueue/river v0.38.0 // indirect
 	github.com/riverqueue/river/riverdriver v0.38.0 // indirect
+	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.38.0 // indirect
 	github.com/riverqueue/river/rivershared v0.38.0 // indirect
-	github.com/riverqueue/river/rivertype v0.38.0 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
