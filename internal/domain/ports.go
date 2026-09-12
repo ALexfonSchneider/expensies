@@ -24,7 +24,7 @@ type StatementRepository interface {
 
 // TransactionRepository reads and updates individual transactions.
 type TransactionRepository interface {
-	List(ctx context.Context, f TransactionFilter) ([]Transaction, int, error)
+	List(ctx context.Context, f TransactionFilter) ([]Transaction, ListTotals, error)
 	Get(ctx context.Context, id int64) (*Transaction, error)
 	Update(ctx context.Context, id int64, p TransactionPatch) error
 	// ListAutoCategorized returns every transaction whose category was not

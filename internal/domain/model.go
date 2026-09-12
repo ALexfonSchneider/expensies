@@ -255,6 +255,15 @@ type TransactionFilter struct {
 	Offset           int
 }
 
+// ListTotals sums every row a TransactionFilter matches, not just the
+// page, so a filtered list can show what it adds up to. Excluded rows are
+// left out, as everywhere else.
+type ListTotals struct {
+	Count   int
+	Expense Money
+	Income  Money
+}
+
 // TransactionPatch is a partial update. SetCategory distinguishes "leave
 // the category alone" from "clear it".
 type TransactionPatch struct {

@@ -86,27 +86,35 @@ func transactionWhere(f domain.TransactionFilter) *whereBuilder {
 }
 
 // List implements domain.TransactionRepository.
-func (r *Transactions) List(ctx context.Context, f domain.TransactionFilter) ([]domain.Transaction, int, error) {
+func (r *Transactions) List(ctx context.Context, f domain.TransactionFilter) ([]domain.Transaction, domain.ListTotals, error) {
 	w := transactionWhere(f)
 	from := ` FROM transactions t LEFT JOIN categories c ON c.id = t.category_id` + w.sql()
 
-	var total int
-	if err := r.q().QueryRow(ctx, `SELECT count(*)`+from, w.args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("postgresrepo: count transactions: %w", err)
+	var totals domain.ListTotals
+	var expense, income int64
+	err := r.q().QueryRow(ctx, `
+		SELECT count(*),
+		       COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'expense' AND NOT t.excluded), 0),
+		       COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'income' AND NOT t.excluded), 0)`+from,
+		w.args...).Scan(&totals.Count, &expense, &income)
+	if err != nil {
+		return nil, domain.ListTotals{}, fmt.Errorf("postgresrepo: count transactions: %w", err)
 	}
+	totals.Expense = domain.Money(expense)
+	totals.Income = domain.Money(income)
 
 	args := append(append([]any{}, w.args...), f.Limit, f.Offset)
 	rows, err := r.q().Query(ctx,
 		`SELECT `+txColumns+from+fmt.Sprintf(` ORDER BY t.op_at DESC, t.id DESC LIMIT $%d OFFSET $%d`, len(args)-1, len(args)),
 		args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("postgresrepo: list transactions: %w", err)
+		return nil, domain.ListTotals{}, fmt.Errorf("postgresrepo: list transactions: %w", err)
 	}
 	items, err := collectTransactions(rows)
 	if err != nil {
-		return nil, 0, err
+		return nil, domain.ListTotals{}, err
 	}
-	return items, total, nil
+	return items, totals, nil
 }
 
 // Get implements domain.TransactionRepository.

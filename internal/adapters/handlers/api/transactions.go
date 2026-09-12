@@ -41,7 +41,7 @@ func (h *Handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 	f.Kind = domain.Kind(r.URL.Query().Get("kind"))
 	f.Query = r.URL.Query().Get("q")
 
-	items, total, err := h.svc.ListTransactions(r.Context(), f)
+	items, totals, err := h.svc.ListTransactions(r.Context(), f)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -50,7 +50,12 @@ func (h *Handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 	for _, t := range items {
 		out = append(out, h.transactionDTO(t))
 	}
-	writeJSON(w, http.StatusOK, listDTO[transactionDTO]{Items: out, Total: total})
+	writeJSON(w, http.StatusOK, transactionListDTO{
+		Items:   out,
+		Total:   totals.Count,
+		Expense: int64(totals.Expense),
+		Income:  int64(totals.Income),
+	})
 }
 
 // patchTransaction accepts {"category_id": 5 | null, "note": "..."}. A key

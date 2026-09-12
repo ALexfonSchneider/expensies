@@ -644,6 +644,53 @@ input.short {
   font-weight: 500;
 }
 
+.list-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: baseline;
+  padding: 2px 8px 12px;
+  border-bottom: 1px solid var(--grid);
+  margin-bottom: 4px;
+}
+
+.list-totals strong {
+  font-size: 16px;
+}
+
+/* Day groups in the operations list */
+.tx-table tr.day-row td {
+  background: var(--page);
+  border-bottom: 1px solid var(--grid);
+  padding-top: 14px;
+  padding-bottom: 6px;
+  font-size: 12.5px;
+}
+
+.tx-table tbody tr.day-row:hover {
+  background: var(--page);
+}
+
+.tx-table tr.day-row:first-child td {
+  padding-top: 4px;
+}
+
+.day-title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.day-total {
+  font-variant-numeric: tabular-nums;
+}
+
+.time-cell {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  width: 56px;
+}
+
 .tx-sub {
   color: var(--muted);
   font-size: 12.5px;

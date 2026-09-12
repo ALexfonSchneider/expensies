@@ -104,6 +104,13 @@ export function fmtDateTime(rfc3339: string): string {
   return `${fmtDayFull(date)} ${time}`.trim();
 }
 
+/** "17:41" from an RFC 3339 timestamp, without zone conversion. */
+export function fmtTime(rfc3339: string): string {
+  if (!rfc3339) return '';
+  const rest = rfc3339.split('T')[1];
+  return rest ? rest.slice(0, 5) : '';
+}
+
 /** Short x-axis label for a bucket start. */
 export function bucketLabel(start: string, g: Granularity): string {
   const d = parseISODate(start);

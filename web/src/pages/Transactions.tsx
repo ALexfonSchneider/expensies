@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   api,
@@ -11,17 +11,33 @@ import {
   type RuleInput,
   type Transaction,
   type TransactionPatch,
-} from '../api';
-import PeriodBar from '../components/PeriodBar';
-import ReceiptItems from '../components/ReceiptItems';
-import { FIELD_LABELS, fmtDateTime, int, KIND_LABELS, OP_LABELS, plural, signedMoney } from '../format';
-import { usePeriodState } from '../period';
+} from "../api";
+import PeriodBar from "../components/PeriodBar";
+import ReceiptItems from "../components/ReceiptItems";
+import {
+  FIELD_LABELS,
+  fmtDayWithWeekday,
+  fmtTime,
+  int,
+  KIND_LABELS,
+  money,
+  OP_LABELS,
+  plural,
+  signedMoney,
+} from "../format";
+import { usePeriodState } from "../period";
 
 const PAGE = 50;
 
-type Editor = { id: number; kind: 'note' | 'rule' | 'receipt' } | null;
+type Editor = { id: number; kind: "note" | "rule" | "receipt" } | null;
 
-function ReceiptForTransaction({ txId, onError }: { txId: number; onError: (e: unknown) => void }) {
+function ReceiptForTransaction({
+  txId,
+  onError,
+}: {
+  txId: number;
+  onError: (e: unknown) => void;
+}) {
   const [receipts, setReceipts] = useState<Receipt[] | null>(null);
   useEffect(() => {
     api.receipts
@@ -84,19 +100,31 @@ interface RuleEditorProps {
 // Seeds the rule with the most specific attribute the line has, so one
 // click covers every future operation at the same merchant.
 function seedRule(tx: Transaction): RuleInput {
-  let field = 'description';
+  let field = "description";
   let value = tx.description;
   if (tx.merchant) {
-    field = 'merchant';
+    field = "merchant";
     value = tx.merchant;
   } else if (tx.counterparty) {
-    field = 'counterparty';
+    field = "counterparty";
     value = tx.counterparty;
   }
-  return { category_id: tx.category_id ?? 0, field, op: 'contains', value, priority: 50 };
+  return {
+    category_id: tx.category_id ?? 0,
+    field,
+    op: "contains",
+    value,
+    priority: 50,
+  };
 }
 
-function RuleEditor({ tx, categories, onCreated, onError, onCancel }: RuleEditorProps) {
+function RuleEditor({
+  tx,
+  categories,
+  onCreated,
+  onError,
+  onCancel,
+}: RuleEditorProps) {
   const [rule, setRule] = useState<RuleInput>(() => seedRule(tx));
   const [busy, setBusy] = useState(false);
 
@@ -115,14 +143,22 @@ function RuleEditor({ tx, categories, onCreated, onError, onCancel }: RuleEditor
   return (
     <form className="inline-form" onSubmit={submit}>
       <span className="hint">Правило:</span>
-      <select value={rule.field} onChange={(e) => setRule({ ...rule, field: e.target.value })} aria-label="Поле">
+      <select
+        value={rule.field}
+        onChange={(e) => setRule({ ...rule, field: e.target.value })}
+        aria-label="Поле"
+      >
         {Object.entries(FIELD_LABELS).map(([k, v]) => (
           <option key={k} value={k}>
             {v}
           </option>
         ))}
       </select>
-      <select value={rule.op} onChange={(e) => setRule({ ...rule, op: e.target.value })} aria-label="Условие">
+      <select
+        value={rule.op}
+        onChange={(e) => setRule({ ...rule, op: e.target.value })}
+        aria-label="Условие"
+      >
         {Object.entries(OP_LABELS).map(([k, v]) => (
           <option key={k} value={k}>
             {v}
@@ -138,8 +174,10 @@ function RuleEditor({ tx, categories, onCreated, onError, onCancel }: RuleEditor
       />
       <span className="hint">→</span>
       <select
-        value={rule.category_id || ''}
-        onChange={(e) => setRule({ ...rule, category_id: Number(e.target.value) })}
+        value={rule.category_id || ""}
+        onChange={(e) =>
+          setRule({ ...rule, category_id: Number(e.target.value) })
+        }
         aria-label="Категория"
         required
       >
@@ -159,13 +197,39 @@ function RuleEditor({ tx, categories, onCreated, onError, onCancel }: RuleEditor
         title="Приоритет: меньше = раньше"
       />
       <button type="submit" className="btn btn-primary" disabled={busy}>
-        {busy ? 'Применяем…' : 'Создать и применить'}
+        {busy ? "Применяем…" : "Создать и применить"}
       </button>
       <button type="button" className="btn" onClick={onCancel}>
         Отмена
       </button>
     </form>
   );
+}
+
+interface DayGroup {
+  date: string;
+  items: Transaction[];
+  expense: number;
+  income: number;
+}
+
+// Items arrive newest first, so consecutive rows with the same op_date form
+// one day; totals ignore excluded rows the same way the analytics do.
+function groupByDay(items: Transaction[]): DayGroup[] {
+  const groups: DayGroup[] = [];
+  for (const t of items) {
+    let g = groups[groups.length - 1];
+    if (!g || g.date !== t.op_date) {
+      g = { date: t.op_date, items: [], expense: 0, income: 0 };
+      groups.push(g);
+    }
+    g.items.push(t);
+    if (!t.excluded) {
+      if (t.direction === "income") g.income += t.amount;
+      else g.expense += t.amount;
+    }
+  }
+  return groups;
 }
 
 export default function Transactions() {
@@ -176,21 +240,28 @@ export default function Transactions() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
+  const [sums, setSums] = useState({ expense: 0, income: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editor, setEditor] = useState<Editor>(null);
-  const [query, setQuery] = useState(sp.get('q') ?? '');
+  const [query, setQuery] = useState(sp.get("q") ?? "");
 
-  const idParam = sp.get('id') ?? '';
-  const categoryParam = sp.get('category') ?? '';
-  const uncategorized = sp.get('uncategorized') === '1';
-  const direction = (sp.get('direction') ?? '') as Direction | '';
-  const q = sp.get('q') ?? '';
+  const idParam = sp.get("id") ?? "";
+  const categoryParam = sp.get("category") ?? "";
+  const uncategorized = sp.get("uncategorized") === "1";
+  const direction = (sp.get("direction") ?? "") as Direction | "";
+  const q = sp.get("q") ?? "";
 
   useEffect(() => {
-    api.analytics.range().then(setRange).catch(() => setRange(null));
-    api.categories.list().then((r) => setCategories(r.items)).catch((e: unknown) => setError(errorMessage(e)));
+    api.analytics
+      .range()
+      .then(setRange)
+      .catch(() => setRange(null));
+    api.categories
+      .list()
+      .then((r) => setCategories(r.items))
+      .catch((e: unknown) => setError(errorMessage(e)));
   }, []);
 
   // Debounce the search box into the URL so typing does not fire a request
@@ -201,8 +272,8 @@ export default function Transactions() {
         setSp(
           (prev) => {
             const next = new URLSearchParams(prev);
-            if (query) next.set('q', query);
-            else next.delete('q');
+            if (query) next.set("q", query);
+            else next.delete("q");
             return next;
           },
           { replace: true },
@@ -217,7 +288,7 @@ export default function Transactions() {
       setSp(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (value === null || value === '') next.delete(key);
+          if (value === null || value === "") next.delete(key);
           else next.set(key, value);
           return next;
         },
@@ -249,16 +320,30 @@ export default function Transactions() {
         })
         .then((r) => {
           setTotal(r.total);
+          setSums({ expense: r.expense, income: r.income });
           setItems((prev) => (offset === 0 ? r.items : [...prev, ...r.items]));
           // Arriving from a receipt: show the operation with its receipt open.
-          if (idParam && r.items.length === 1 && r.items[0].receipt_id !== null) {
-            setEditor({ id: r.items[0].id, kind: 'receipt' });
+          if (
+            idParam &&
+            r.items.length === 1 &&
+            r.items[0].receipt_id !== null
+          ) {
+            setEditor({ id: r.items[0].id, kind: "receipt" });
           }
         })
         .catch((e: unknown) => setError(errorMessage(e)))
         .finally(() => setLoading(false));
     },
-    [idParam, from, to, includeTransfers, categoryParam, uncategorized, direction, q],
+    [
+      idParam,
+      from,
+      to,
+      includeTransfers,
+      categoryParam,
+      uncategorized,
+      direction,
+      q,
+    ],
   );
 
   useEffect(() => {
@@ -271,7 +356,11 @@ export default function Transactions() {
   const patch = (tx: Transaction, body: TransactionPatch) =>
     api.transactions
       .patch(tx.id, body)
-      .then((updated) => setItems((prev) => prev.map((t) => (t.id === updated.id ? updated : t))))
+      .then((updated) =>
+        setItems((prev) =>
+          prev.map((t) => (t.id === updated.id ? updated : t)),
+        ),
+      )
       .catch(fail);
 
   return (
@@ -287,16 +376,16 @@ export default function Transactions() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <select
-          value={uncategorized ? 'none' : categoryParam}
+          value={uncategorized ? "none" : categoryParam}
           onChange={(e) => {
             const v = e.target.value;
             setSp(
               (prev) => {
                 const next = new URLSearchParams(prev);
-                next.delete('category');
-                next.delete('uncategorized');
-                if (v === 'none') next.set('uncategorized', '1');
-                else if (v) next.set('category', v);
+                next.delete("category");
+                next.delete("uncategorized");
+                if (v === "none") next.set("uncategorized", "1");
+                else if (v) next.set("category", v);
                 return next;
               },
               { replace: true },
@@ -311,31 +400,56 @@ export default function Transactions() {
             </option>
           ))}
         </select>
-        <select value={direction} onChange={(e) => setParam('direction', e.target.value)}>
+        <select
+          value={direction}
+          onChange={(e) => setParam("direction", e.target.value)}
+        >
           <option value="">Расход и приход</option>
           <option value="expense">Только расход</option>
           <option value="income">Только приход</option>
         </select>
         <span className="hint">
-          {int(total)} {plural(total, ['операция', 'операции', 'операций'])}
+          {int(total)} {plural(total, ["операция", "операции", "операций"])}
         </span>
       </div>
       {error && <div className="alert">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
       {idParam && (
         <div className="alert alert-ok">
-          Показана одна операция по чеку.{' '}
-          <button type="button" className="btn btn-small" onClick={() => setParam('id', null)}>
+          Показана одна операция по чеку.{" "}
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => setParam("id", null)}
+          >
             Показать все операции периода
           </button>
         </div>
       )}
 
       <div className="card">
-        <table className={loading ? 'table tx-table is-loading' : 'table tx-table'}>
+        <div className={loading ? "list-totals is-loading" : "list-totals"}>
+          <span>
+            <span className="hint">Итого за период</span>{" "}
+            <strong className="amount">−{money(sums.expense)}</strong>
+          </span>
+          {sums.income > 0 && (
+            <span>
+              <span className="hint">приход</span>{" "}
+              <strong className="amount income">+{money(sums.income)}</strong>
+            </span>
+          )}
+          <span className="hint">
+            {int(total)} {plural(total, ["операция", "операции", "операций"])}
+            {items.length < total ? `, показано ${int(items.length)}` : ""}
+          </span>
+        </div>
+        <table
+          className={loading ? "table tx-table is-loading" : "table tx-table"}
+        >
           <thead>
             <tr>
-              <th>Дата</th>
+              <th>Время</th>
               <th>Операция</th>
               <th>Категория</th>
               <th className="num">Сумма</th>
@@ -343,118 +457,210 @@ export default function Transactions() {
             </tr>
           </thead>
           <tbody>
-            {items.map((t) => {
-              const cat = t.category_id !== null ? byId.get(t.category_id) : undefined;
-              const active = editor && editor.id === t.id ? editor.kind : null;
-              return [
-                <tr key={t.id} className={t.excluded ? 'is-excluded' : undefined}>
-                  <td className="nowrap">{fmtDateTime(t.op_at)}</td>
-                  <td>
-                    <div className="tx-title">
-                      {t.merchant || t.counterparty || t.description}
-                      {t.receipt_id !== null && (
-                        <button
-                          type="button"
-                          className="badge badge-receipt"
-                          title="Показать состав покупки по чеку"
-                          onClick={() => setEditor(active === 'receipt' ? null : { id: t.id, kind: 'receipt' })}
-                        >
-                          чек
-                        </button>
-                      )}
-                    </div>
-                    <div className="tx-sub">
-                      {KIND_LABELS[t.kind] ?? t.kind}
-                      {t.merchant || t.counterparty ? ` · ${t.description}` : ''}
-                      {t.card ? ` · ${t.card}` : ''}
-                      {t.source === 'receipt' && (
-                        <span className="badge badge-muted" title="Операция построена по чеку, в выписке её пока нет">
-                          по чеку, вне выписки
-                        </span>
-                      )}
-                      {t.excluded && <span className="badge badge-muted">не учитывается</span>}
-                    </div>
-                    {t.note && <div className="tx-note">{t.note}</div>}
-                  </td>
-                  <td>
-                    <div className="cat-cell">
-                      <span className="swatch" style={{ background: cat?.color ?? 'transparent' }} aria-hidden="true" />
-                      <select
-                        aria-label="Категория"
-                        value={t.category_id ?? ''}
-                        onChange={(e) => void patch(t, { category_id: e.target.value === '' ? null : Number(e.target.value) })}
-                      >
-                        <option value="">Без категории</option>
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                      {t.category_source === 'manual' && <span className="badge">вручную</span>}
-                    </div>
-                  </td>
-                  <td className={t.direction === 'income' ? 'num amount income' : 'num amount'}>
-                    {signedMoney(t.amount, t.direction)}
-                  </td>
-                  <td className="num row-actions">
-                    <button
-                      type="button"
-                      className={active === 'note' ? 'btn btn-small is-active' : 'btn btn-small'}
-                      title="Заметка"
-                      onClick={() => setEditor(active === 'note' ? null : { id: t.id, kind: 'note' })}
-                    >
-                      Заметка
-                    </button>
-                    <button
-                      type="button"
-                      className={active === 'rule' ? 'btn btn-small is-active' : 'btn btn-small'}
-                      title="Создать правило категоризации по этой операции"
-                      onClick={() => setEditor(active === 'rule' ? null : { id: t.id, kind: 'rule' })}
-                    >
-                      Правило
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-small"
-                      title={t.excluded ? 'Снова учитывать в статистике' : 'Не учитывать в статистике'}
-                      onClick={() => void patch(t, { excluded: !t.excluded })}
-                    >
-                      {t.excluded ? 'Учитывать' : 'Исключить'}
-                    </button>
-                  </td>
-                </tr>,
-                active && (
-                  <tr key={`${t.id}-editor`} className="editor-row">
-                    <td colSpan={5}>
-                      {active === 'receipt' ? (
-                        <ReceiptForTransaction txId={t.id} onError={fail} />
-                      ) : active === 'note' ? (
-                        <NoteEditor
-                          tx={t}
-                          onSave={(note) => {
-                            void patch(t, { note }).then(() => setEditor(null));
-                          }}
-                          onCancel={() => setEditor(null)}
-                        />
-                      ) : (
-                        <RuleEditor
-                          tx={t}
-                          categories={categories}
-                          onError={fail}
-                          onCancel={() => setEditor(null)}
-                          onCreated={(updated) => {
-                            setEditor(null);
-                            setNotice(`Правило создано, изменено операций: ${int(updated)}`);
-                            void load(0);
-                          }}
-                        />
-                      )}
+            {groupByDay(items).map((g) => [
+              <tr key={`day-${g.date}`} className="day-row">
+                <td colSpan={3}>
+                  <span className="day-title">{fmtDayWithWeekday(g.date)}</span>
+                  <span className="hint">
+                    {" "}
+                    · {int(g.items.length)}{" "}
+                    {plural(g.items.length, [
+                      "операция",
+                      "операции",
+                      "операций",
+                    ])}
+                  </span>
+                </td>
+                <td className="num day-total">
+                  {g.expense > 0 && (
+                    <span className="amount">−{money(g.expense)}</span>
+                  )}
+                  {g.income > 0 && (
+                    <span className="amount income"> +{money(g.income)}</span>
+                  )}
+                </td>
+                <td />
+              </tr>,
+              ...g.items.map((t) => {
+                const cat =
+                  t.category_id !== null ? byId.get(t.category_id) : undefined;
+                const active =
+                  editor && editor.id === t.id ? editor.kind : null;
+                return [
+                  <tr
+                    key={t.id}
+                    className={t.excluded ? "is-excluded" : undefined}
+                  >
+                    <td className="nowrap time-cell">{fmtTime(t.op_at)}</td>
+                    <td>
+                      <div className="tx-title">
+                        {t.merchant || t.counterparty || t.description}
+                        {t.receipt_id !== null && (
+                          <button
+                            type="button"
+                            className="badge badge-receipt"
+                            title="Показать состав покупки по чеку"
+                            onClick={() =>
+                              setEditor(
+                                active === "receipt"
+                                  ? null
+                                  : { id: t.id, kind: "receipt" },
+                              )
+                            }
+                          >
+                            чек
+                          </button>
+                        )}
+                      </div>
+                      <div className="tx-sub">
+                        {KIND_LABELS[t.kind] ?? t.kind}
+                        {t.merchant || t.counterparty
+                          ? ` · ${t.description}`
+                          : ""}
+                        {t.card ? ` · ${t.card}` : ""}
+                        {t.source === "receipt" && (
+                          <span
+                            className="badge badge-muted"
+                            title="Операция построена по чеку, в выписке её пока нет"
+                          >
+                            по чеку, вне выписки
+                          </span>
+                        )}
+                        {t.excluded && (
+                          <span className="badge badge-muted">
+                            не учитывается
+                          </span>
+                        )}
+                      </div>
+                      {t.note && <div className="tx-note">{t.note}</div>}
                     </td>
-                  </tr>
-                ),
-              ];
-            })}
+                    <td>
+                      <div className="cat-cell">
+                        <span
+                          className="swatch"
+                          style={{ background: cat?.color ?? "transparent" }}
+                          aria-hidden="true"
+                        />
+                        <select
+                          aria-label="Категория"
+                          value={t.category_id ?? ""}
+                          onChange={(e) =>
+                            void patch(t, {
+                              category_id:
+                                e.target.value === ""
+                                  ? null
+                                  : Number(e.target.value),
+                            })
+                          }
+                        >
+                          <option value="">Без категории</option>
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                        {t.category_source === "manual" && (
+                          <span className="badge">вручную</span>
+                        )}
+                      </div>
+                    </td>
+                    <td
+                      className={
+                        t.direction === "income"
+                          ? "num amount income"
+                          : "num amount"
+                      }
+                    >
+                      {signedMoney(t.amount, t.direction)}
+                    </td>
+                    <td className="num row-actions">
+                      <button
+                        type="button"
+                        className={
+                          active === "note"
+                            ? "btn btn-small is-active"
+                            : "btn btn-small"
+                        }
+                        title="Заметка"
+                        onClick={() =>
+                          setEditor(
+                            active === "note"
+                              ? null
+                              : { id: t.id, kind: "note" },
+                          )
+                        }
+                      >
+                        Заметка
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          active === "rule"
+                            ? "btn btn-small is-active"
+                            : "btn btn-small"
+                        }
+                        title="Создать правило категоризации по этой операции"
+                        onClick={() =>
+                          setEditor(
+                            active === "rule"
+                              ? null
+                              : { id: t.id, kind: "rule" },
+                          )
+                        }
+                      >
+                        Правило
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-small"
+                        title={
+                          t.excluded
+                            ? "Снова учитывать в статистике"
+                            : "Не учитывать в статистике"
+                        }
+                        onClick={() => void patch(t, { excluded: !t.excluded })}
+                      >
+                        {t.excluded ? "Учитывать" : "Исключить"}
+                      </button>
+                    </td>
+                  </tr>,
+                  active && (
+                    <tr key={`${t.id}-editor`} className="editor-row">
+                      <td colSpan={5}>
+                        {active === "receipt" ? (
+                          <ReceiptForTransaction txId={t.id} onError={fail} />
+                        ) : active === "note" ? (
+                          <NoteEditor
+                            tx={t}
+                            onSave={(note) => {
+                              void patch(t, { note }).then(() =>
+                                setEditor(null),
+                              );
+                            }}
+                            onCancel={() => setEditor(null)}
+                          />
+                        ) : (
+                          <RuleEditor
+                            tx={t}
+                            categories={categories}
+                            onError={fail}
+                            onCancel={() => setEditor(null)}
+                            onCreated={(updated) => {
+                              setEditor(null);
+                              setNotice(
+                                `Правило создано, изменено операций: ${int(updated)}`,
+                              );
+                              void load(0);
+                            }}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  ),
+                ];
+              }),
+            ])}
             {items.length === 0 && !loading && (
               <tr>
                 <td colSpan={5} className="empty">
@@ -466,7 +672,12 @@ export default function Transactions() {
         </table>
         {items.length < total && (
           <div className="table-foot">
-            <button type="button" className="btn" disabled={loading} onClick={() => void load(items.length)}>
+            <button
+              type="button"
+              className="btn"
+              disabled={loading}
+              onClick={() => void load(items.length)}
+            >
               Показать ещё ({int(total - items.length)})
             </button>
           </div>

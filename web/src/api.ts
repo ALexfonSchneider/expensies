@@ -253,6 +253,12 @@ export interface ListResponse<T> {
   total: number;
 }
 
+/** Operations list: the sums cover every row the filter matches, not the page. */
+export interface TransactionList extends ListResponse<Transaction> {
+  expense: number;
+  income: number;
+}
+
 export interface Signal {
   kind: string;
   severity: 'bad' | 'warn' | 'info';
@@ -372,7 +378,7 @@ export const api = {
     remove: (id: number) => request<void>(`/api/v1/statements/${id}`, { method: 'DELETE' }),
   },
   transactions: {
-    list: (p: TransactionParams) => request<ListResponse<Transaction>>(`/api/v1/transactions${qs(p)}`),
+    list: (p: TransactionParams) => request<TransactionList>(`/api/v1/transactions${qs(p)}`),
     patch: (id: number, body: TransactionPatch) =>
       request<Transaction>(`/api/v1/transactions/${id}`, json('PATCH', body)),
   },

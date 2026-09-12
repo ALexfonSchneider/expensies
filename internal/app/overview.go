@@ -186,10 +186,11 @@ func (s *Service) signals(ctx context.Context, today time.Time, month domain.Mon
 	out = append(out, large...)
 
 	uncategorizedFrom := today.AddDate(0, 0, -largeSpendBaseline)
-	_, uncategorized, err := s.transactions.List(ctx, domain.TransactionFilter{From: &uncategorizedFrom, To: &today, Uncategorized: true, Limit: 1})
+	_, uncategorizedTotals, err := s.transactions.List(ctx, domain.TransactionFilter{From: &uncategorizedFrom, To: &today, Uncategorized: true, Limit: 1})
 	if err != nil {
 		return nil, fmt.Errorf("app: uncategorized count: %w", err)
 	}
+	uncategorized := uncategorizedTotals.Count
 	if uncategorized > 0 {
 		out = append(out, domain.Signal{
 			Kind: "uncategorized", Severity: domain.SeverityInfo,

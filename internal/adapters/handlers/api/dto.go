@@ -58,6 +58,14 @@ type transactionDTO struct {
 	ReceiptID      *int64 `json:"receipt_id"`
 }
 
+// transactionListDTO carries the sums of the whole filter next to the page.
+type transactionListDTO struct {
+	Items   []transactionDTO `json:"items"`
+	Total   int              `json:"total"`
+	Expense int64            `json:"expense"`
+	Income  int64            `json:"income"`
+}
+
 type categoryDTO struct {
 	ID         int64  `json:"id"`
 	Name       string `json:"name"`

@@ -13,8 +13,9 @@ const (
 	maxPageSize     = 500
 )
 
-// ListTransactions returns a page of transactions and the total match count.
-func (s *Service) ListTransactions(ctx context.Context, f domain.TransactionFilter) ([]domain.Transaction, int, error) {
+// ListTransactions returns a page of transactions and the totals of every
+// row the filter matches.
+func (s *Service) ListTransactions(ctx context.Context, f domain.TransactionFilter) ([]domain.Transaction, domain.ListTotals, error) {
 	if f.Limit <= 0 {
 		f.Limit = defaultPageSize
 	}
@@ -25,18 +26,18 @@ func (s *Service) ListTransactions(ctx context.Context, f domain.TransactionFilt
 		f.Offset = 0
 	}
 	if f.From != nil && f.To != nil && f.From.After(*f.To) {
-		return nil, 0, fmt.Errorf("%w: from is after to", domain.ErrInvalid)
+		return nil, domain.ListTotals{}, fmt.Errorf("%w: from is after to", domain.ErrInvalid)
 	}
 	switch f.Direction {
 	case "", domain.DirectionExpense, domain.DirectionIncome:
 	default:
-		return nil, 0, fmt.Errorf("%w: unknown direction %q", domain.ErrInvalid, f.Direction)
+		return nil, domain.ListTotals{}, fmt.Errorf("%w: unknown direction %q", domain.ErrInvalid, f.Direction)
 	}
-	items, total, err := s.transactions.List(ctx, f)
+	items, totals, err := s.transactions.List(ctx, f)
 	if err != nil {
-		return nil, 0, fmt.Errorf("app: list transactions: %w", err)
+		return nil, domain.ListTotals{}, fmt.Errorf("app: list transactions: %w", err)
 	}
-	return items, total, nil
+	return items, totals, nil
 }
 
 // UpdateTransaction applies a manual category or note change and returns
