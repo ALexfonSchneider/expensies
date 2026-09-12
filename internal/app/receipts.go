@@ -91,18 +91,19 @@ func (s *Service) ClearReceiptSession(ctx context.Context) error {
 func (s *Service) ReceiptSyncStatus(ctx context.Context) (domain.ReceiptSyncStatus, error) {
 	s.sync.mu.Lock()
 	defer s.sync.mu.Unlock()
-	if s.sync.status.Running || s.sync.loaded {
-		return s.sync.status, nil
+	if !s.sync.status.Running && !s.sync.loaded {
+		st, err := s.syncStore.LoadSyncStatus(ctx)
+		if err != nil {
+			return domain.ReceiptSyncStatus{}, fmt.Errorf("app: load sync status: %w", err)
+		}
+		if st != nil {
+			s.sync.status = *st
+		}
+		s.sync.loaded = true
 	}
-	st, err := s.syncStore.LoadSyncStatus(ctx)
-	if err != nil {
-		return domain.ReceiptSyncStatus{}, fmt.Errorf("app: load sync status: %w", err)
-	}
-	if st != nil {
-		s.sync.status = *st
-	}
-	s.sync.loaded = true
-	return s.sync.status, nil
+	out := s.sync.status
+	out.NextRunAt = s.nextRun
+	return out, nil
 }
 
 // StartReceiptSync launches a background synchronization. The archive

@@ -300,7 +300,11 @@ export default function Receipts() {
                     : 'Загрузка прервалась. Попробуйте позже или нажмите «Загрузить чеки».'}
                 </div>
               )}
-              <p className="hint">Новые чеки подтягиваются автоматически несколько раз в день.</p>
+              <p className="hint">
+                {status.next_run_at
+                  ? `Следующая автоматическая загрузка ${fmtDateTime(status.next_run_at)}.`
+                  : 'Автоматическая загрузка выключена, чеки подтягиваются по кнопке.'}
+              </p>
             </div>
           ) : (
             <div className="hint">…</div>

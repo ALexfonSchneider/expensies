@@ -32,6 +32,7 @@ type syncStatusDTO struct {
 	Pending    int    `json:"pending"`
 	Matched    int    `json:"matched"`
 	Error      string `json:"error"`
+	NextRunAt  string `json:"next_run_at"`
 }
 
 type receiptItemDTO struct {
@@ -101,6 +102,7 @@ func (h *Handler) syncStatusDTO(st domain.ReceiptSyncStatus) syncStatusDTO {
 		Pending:    st.Pending,
 		Matched:    st.Matched,
 		Error:      st.Error,
+		NextRunAt:  h.fmtTime(st.NextRunAt),
 	}
 }
 

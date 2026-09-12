@@ -200,6 +200,7 @@ export interface ReceiptSyncStatus {
   pending: number;
   matched: number;
   error: string;
+  next_run_at: string;
 }
 
 export interface ReceiptItem {

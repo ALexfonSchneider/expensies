@@ -157,6 +157,9 @@ type ReceiptSyncStatus struct {
 	Pending    int
 	Matched    int
 	Error      string
+	// NextRunAt is when the scheduler will pull receipts again; zero when
+	// the scheduler is off or nothing is connected.
+	NextRunAt time.Time
 }
 
 // ItemTotal aggregates one product name over a period.

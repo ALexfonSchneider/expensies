@@ -58,6 +58,8 @@ type Service struct {
 	sync     receiptSync
 	// schedulerDone closes when the periodic sync loop has exited.
 	schedulerDone chan struct{}
+	// nextRun is the scheduler's next tick, guarded by sync.mu.
+	nextRun time.Time
 }
 
 // receiptSync is the state of the single background synchronization.
@@ -146,14 +148,22 @@ func (s *Service) runReceiptScheduler() {
 	}
 	ticker := time.NewTicker(s.syncInterval)
 	defer ticker.Stop()
+	s.setNextRun(s.now().Add(s.syncInterval))
 	for {
 		select {
 		case <-ticker.C:
+			s.setNextRun(s.now().Add(s.syncInterval))
 			s.syncIfDue(false)
 		case <-s.bgCtx.Done():
 			return
 		}
 	}
+}
+
+func (s *Service) setNextRun(t time.Time) {
+	s.sync.mu.Lock()
+	s.nextRun = t
+	s.sync.mu.Unlock()
 }
 
 // syncIfDue starts a synchronization when a session is configured and
