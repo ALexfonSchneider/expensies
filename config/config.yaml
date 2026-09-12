@@ -9,3 +9,8 @@ observe:
 
 upload:
   max_size_mb: 20
+
+receipts:
+  # How often new receipts are pulled from the FNS archive in the
+  # background. Go duration; "0" disables the scheduler.
+  sync_interval: "6h"

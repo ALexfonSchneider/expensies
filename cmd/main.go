@@ -44,6 +44,11 @@ type Config struct {
 	Upload struct {
 		MaxSizeMB int64 `koanf:"max_size_mb"`
 	} `koanf:"upload"`
+	Receipts struct {
+		// SyncInterval is a Go duration ("6h", "30m"); empty or "0" disables
+		// the scheduler and leaves only the manual button.
+		SyncInterval string `koanf:"sync_interval"`
+	} `koanf:"receipts"`
 }
 
 func main() {
@@ -67,6 +72,14 @@ func run() error {
 	}
 	if cfg.Upload.MaxSizeMB <= 0 {
 		cfg.Upload.MaxSizeMB = 20
+	}
+	syncInterval := 6 * time.Hour
+	if raw := cfg.Receipts.SyncInterval; raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil {
+			return fmt.Errorf("receipts.sync_interval: %w", err)
+		}
+		syncInterval = d
 	}
 
 	obs, err := observe.New(
@@ -120,18 +133,19 @@ func run() error {
 		return fmt.Errorf("lkdr: %w", err)
 	}
 	svc, err := app.NewService(app.Deps{
-		Logger:          logger,
-		Parser:          parser,
-		Statements:      repo.Statements,
-		Transactions:    repo.Transactions,
-		Categories:      repo.Categories,
-		Analytics:       repo.Analytics,
-		Budgets:         repo.Budgets,
-		ReceiptSource:   receiptSource,
-		ReceiptSessions: repo.Settings,
-		ReceiptSync:     repo.Settings,
-		Receipts:        repo.Receipts,
-		Now:             time.Now,
+		Logger:              logger,
+		Parser:              parser,
+		Statements:          repo.Statements,
+		Transactions:        repo.Transactions,
+		Categories:          repo.Categories,
+		Analytics:           repo.Analytics,
+		Budgets:             repo.Budgets,
+		ReceiptSource:       receiptSource,
+		ReceiptSessions:     repo.Settings,
+		ReceiptSync:         repo.Settings,
+		Receipts:            repo.Receipts,
+		ReceiptSyncInterval: syncInterval,
+		Now:                 time.Now,
 	})
 	if err != nil {
 		return fmt.Errorf("service: %w", err)

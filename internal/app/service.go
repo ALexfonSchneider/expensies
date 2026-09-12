@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -26,6 +27,9 @@ type Deps struct {
 	ReceiptSessions domain.ReceiptSessionStore
 	ReceiptSync     domain.ReceiptSyncStore
 	Receipts        domain.ReceiptRepository
+	// ReceiptSyncInterval is how often receipts are pulled from the archive
+	// without anyone pressing the button; zero leaves only the manual run.
+	ReceiptSyncInterval time.Duration
 	// Now supplies the current time once per operation so repositories
 	// never read the clock themselves.
 	Now func() time.Time
@@ -46,11 +50,14 @@ type Service struct {
 	syncStore     domain.ReceiptSyncStore
 	receipts      domain.ReceiptRepository
 	now           func() time.Time
+	syncInterval  time.Duration
 
 	// bgCtx bounds background jobs; Stop cancels it.
 	bgCtx    context.Context
 	bgCancel context.CancelFunc
 	sync     receiptSync
+	// schedulerDone closes when the periodic sync loop has exited.
+	schedulerDone chan struct{}
 }
 
 // receiptSync is the state of the single background synchronization.
@@ -106,41 +113,89 @@ func NewService(d Deps) (*Service, error) {
 		syncStore:     d.ReceiptSync,
 		receipts:      d.Receipts,
 		now:           d.Now,
+		syncInterval:  d.ReceiptSyncInterval,
 		bgCtx:         bgCtx,
 		bgCancel:      bgCancel,
+		schedulerDone: make(chan struct{}),
 	}, nil
 }
 
-// resumeDelay gives the HTTP server time to come up before the resumed
-// synchronization starts hitting the archive.
-const resumeDelay = 10 * time.Second
+// startupDelay gives the HTTP server time to come up before background
+// work starts hitting the archive.
+const startupDelay = 10 * time.Second
 
-// Start implements platform.Component. A synchronization interrupted by a
-// restart is resumed automatically, so the job needs no page and no click
-// to finish loading receipts.
+// Start implements platform.Component. It launches the receipt scheduler:
+// an interrupted synchronization is resumed right away, and new receipts
+// are pulled every ReceiptSyncInterval, so nothing depends on a page being
+// open or a button being pressed.
 func (s *Service) Start(context.Context) error {
-	go s.resumeReceiptSync()
+	go s.runReceiptScheduler()
 	return nil
 }
 
-func (s *Service) resumeReceiptSync() {
+func (s *Service) runReceiptScheduler() {
+	defer close(s.schedulerDone)
 	select {
-	case <-time.After(resumeDelay):
+	case <-time.After(startupDelay):
 	case <-s.bgCtx.Done():
 		return
 	}
-	pending, err := s.receipts.PendingDetails(s.bgCtx, 1)
-	if err != nil || len(pending) == 0 {
+	s.syncIfDue(true)
+	if s.syncInterval <= 0 {
 		return
 	}
-	if _, err := s.StartReceiptSync(s.bgCtx); err != nil {
-		s.logger.WarnContext(s.bgCtx, "resume receipt sync", "error", err)
-		return
+	ticker := time.NewTicker(s.syncInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.syncIfDue(false)
+		case <-s.bgCtx.Done():
+			return
+		}
 	}
-	s.logger.InfoContext(s.bgCtx, "receipt sync resumed after restart")
 }
 
-// Stop cancels the background receipt synchronization and waits for it.
+// syncIfDue starts a synchronization when a session is configured and
+// either a previous run was interrupted (receipts without details remain),
+// the last run is older than the interval, or a tick asks for it. Without
+// a session it stays silent: the overview already shows that signal.
+func (s *Service) syncIfDue(startup bool) {
+	ctx := s.bgCtx
+	session, err := s.sessions.Load(ctx)
+	if err != nil || session == nil {
+		return
+	}
+	reason := "scheduled"
+	if startup {
+		pending, err := s.receipts.PendingDetails(ctx, 1)
+		if err != nil {
+			return
+		}
+		status, err := s.ReceiptSyncStatus(ctx)
+		if err != nil {
+			return
+		}
+		switch {
+		case len(pending) > 0:
+			reason = "resumed after restart"
+		case s.syncInterval > 0 && (status.FinishedAt.IsZero() || s.now().Sub(status.FinishedAt) >= s.syncInterval):
+			reason = "overdue at startup"
+		default:
+			return
+		}
+	}
+	if _, err := s.StartReceiptSync(ctx); err != nil {
+		if !errors.Is(err, domain.ErrAlreadyExists) {
+			s.logger.WarnContext(ctx, "start receipt sync", "reason", reason, "error", err)
+		}
+		return
+	}
+	s.logger.InfoContext(ctx, "receipt sync started", "reason", reason)
+}
+
+// Stop cancels the scheduler and the running synchronization and waits
+// for both.
 func (s *Service) Stop(ctx context.Context) error {
 	s.bgCancel()
 	s.sync.mu.Lock()
@@ -148,6 +203,11 @@ func (s *Service) Stop(ctx context.Context) error {
 	s.sync.mu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+	select {
+	case <-s.schedulerDone:
+	case <-ctx.Done():
+		return fmt.Errorf("app: stop scheduler: %w", ctx.Err())
 	}
 	if done == nil {
 		return nil
